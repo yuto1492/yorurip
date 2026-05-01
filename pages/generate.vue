@@ -184,6 +184,9 @@ const canGenerate = computed(() => {
   return true
 })
 
+// 結果セクションのアンカー (生成成功後に自動スクロールさせるため)
+const resultsAnchor = ref<HTMLElement | null>(null)
+
 async function handleGenerate(): Promise<void> {
   if (!canGenerate.value) return
   await genStore.generate()
@@ -191,6 +194,12 @@ async function handleGenerate(): Promise<void> {
   // 生成直後にアクティブな hashtag を本文末尾へ付与してしまう。
   // (この後ユーザーが textarea で自由に編集できる。チップは「次回生成時の初期 hashtags」扱い)
   appendHashtagsToCandidatesIfXPost()
+
+  // 生成成功時のみ結果セクションへスクロール (エラー時はそのまま入力エリアに留まる)
+  if (editedCandidates.value.length > 0) {
+    await nextTick()
+    resultsAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 }
 
 // 候補 textarea を中身に合わせて高さフィット (内部スクロールバーを出さない)。
@@ -846,7 +855,7 @@ function onProposalHandled(toolUseId: string, customer?: Customer): void {
     </div>
 
     <!-- ===== 結果 ===== -->
-    <div v-if="editedCandidates.length > 0" class="mt-8 space-y-3">
+    <div v-if="editedCandidates.length > 0" ref="resultsAnchor" class="mt-8 space-y-3 scroll-mt-4">
       <h2 class="text-[11px] uppercase tracking-wider text-ink-400">候補 (編集可)</h2>
 
       <div
@@ -996,5 +1005,36 @@ function onProposalHandled(toolUseId: string, customer?: Customer): void {
         </div>
       </div>
     </Teleport>
+
+    <!-- ===== 生成中オーバーレイ ===== -->
+    <Teleport to="body">
+      <Transition name="gen-fade">
+        <div
+          v-if="loading"
+          class="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-ink-950/85 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div class="relative w-14 h-14">
+            <div class="absolute inset-0 rounded-full border-2 border-accent/20"></div>
+            <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-accent animate-spin"></div>
+          </div>
+          <p class="mt-5 text-sm font-medium text-ink-50">生成中…</p>
+          <p class="mt-1 text-[11px] text-ink-400">3 案作っています (5〜15 秒)</p>
+        </div>
+      </Transition>
+    </Teleport>
   </section>
 </template>
+
+<style scoped>
+.gen-fade-enter-active,
+.gen-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.gen-fade-enter-from,
+.gen-fade-leave-to {
+  opacity: 0;
+}
+</style>

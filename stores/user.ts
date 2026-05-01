@@ -169,7 +169,16 @@ export const useUserStore = defineStore(
       } catch {
         // localStorage 不可環境でもログインは進める
       }
-      const { error } = await supabase.auth.updateUser({ email: trimmed })
+      // 確認メール内のリンクの戻り先を実行環境のオリジンに固定する。
+      // (Supabase ダッシュボードの Site URL に依存しないので、dev = localhost、
+      //  本番 = 本番ドメイン に自動で切り替わる。Redirect URLs allowlist に
+      //  両ドメインを登録しておく必要あり)
+      const redirectTo =
+        typeof window !== 'undefined' ? window.location.origin : undefined
+      const { error } = await supabase.auth.updateUser(
+        { email: trimmed },
+        redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+      )
       if (error) throw error
     }
 
@@ -196,9 +205,16 @@ export const useUserStore = defineStore(
       } catch {
         /* noop */
       }
+      // 確認メール内のリンクの戻り先を実行環境のオリジンに固定する
+      // (Supabase ダッシュボードの Site URL に依存しないので環境別に自動切替)
+      const redirectTo =
+        typeof window !== 'undefined' ? window.location.origin : undefined
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmed,
-        options: { shouldCreateUser: false },
+        options: {
+          shouldCreateUser: false,
+          ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
+        },
       })
       if (error) throw error
     }

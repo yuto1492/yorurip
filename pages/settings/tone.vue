@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { useToneStore } from '~/stores/tone'
 import { useUserStore } from '~/stores/user'
+import { useDB } from '~/composables/useDB'
 import type { ToneFeatures, ToneFeatureSet, ToneSample } from '~/types/domain'
 
 definePageMeta({
@@ -317,6 +318,117 @@ async function copyDebug(text: string): Promise<void> {
     console.warn('clipboard failed', e)
   }
 }
+
+// =============================================================================
+// 編集機能: AI が抽出した tone_features を手動で書き換える
+// =============================================================================
+const editMode = ref(false)
+const editDraft = ref<ToneFeatureSet | null>(null)
+const savingEdit = ref(false)
+
+// chip 配列 (string[]) を編集用 textarea (1 行 1 件) に変換
+const draftEndingsText = ref('')
+const draftEmojisText = ref('')
+const draftPunctuationText = ref('')
+const draftDialectExamplesText = ref('')
+const draftCharacteristicPhrasesText = ref('')
+
+function arrayToText(arr: string[] | undefined): string {
+  return (arr ?? []).join('\n')
+}
+function textToArray(s: string): string[] {
+  return s
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+}
+
+function startEdit(): void {
+  if (!toneFeatures.value) return
+  // ディープコピーして draft を作成
+  editDraft.value = JSON.parse(
+    JSON.stringify(toneFeatures.value),
+  ) as ToneFeatureSet
+  // chip 系は textarea で編集するため文字列に展開
+  draftEndingsText.value = arrayToText(editDraft.value.structuralFeatures?.frequentEndings)
+  draftEmojisText.value = arrayToText(editDraft.value.structuralFeatures?.frequentEmojis)
+  draftPunctuationText.value = arrayToText(
+    editDraft.value.structuralFeatures?.frequentPunctuation,
+  )
+  draftDialectExamplesText.value = arrayToText(
+    editDraft.value.judgedFeatures?.dialectExamples,
+  )
+  draftCharacteristicPhrasesText.value = arrayToText(
+    editDraft.value.judgedFeatures?.characteristicPhrases,
+  )
+  editMode.value = true
+}
+
+function cancelEdit(): void {
+  editDraft.value = null
+  editMode.value = false
+}
+
+async function saveEdit(): Promise<void> {
+  if (!editDraft.value || savingEdit.value) return
+  if (!supabaseUser.value) {
+    flash('ログイン情報がありません。ページを再読み込みしてください。', 5000)
+    return
+  }
+  savingEdit.value = true
+  try {
+    // textarea で編集した chip 系を draft に書き戻す
+    if (editDraft.value.structuralFeatures) {
+      editDraft.value.structuralFeatures.frequentEndings = textToArray(draftEndingsText.value)
+      editDraft.value.structuralFeatures.frequentEmojis = textToArray(draftEmojisText.value)
+      editDraft.value.structuralFeatures.frequentPunctuation = textToArray(
+        draftPunctuationText.value,
+      )
+    }
+    if (editDraft.value.judgedFeatures) {
+      editDraft.value.judgedFeatures.dialectExamples = textToArray(
+        draftDialectExamplesText.value,
+      )
+      editDraft.value.judgedFeatures.characteristicPhrases = textToArray(
+        draftCharacteristicPhrasesText.value,
+      )
+    }
+
+    const supabase = useDB()
+    const currentFeatures =
+      (userStore.profile?.tone_features as ToneFeatures | null) ?? {}
+    const next: ToneFeatures = {
+      ...currentFeatures,
+      byChannel: {
+        ...(currentFeatures.byChannel ?? {}),
+        [TONE_CHANNEL]: editDraft.value,
+      },
+      updatedAt: new Date().toISOString(),
+    }
+    const { error } = await supabase
+      .from('user_profile')
+      .update({ tone_features: next as never })
+      .eq('user_id', supabaseUser.value.id)
+    if (error) throw error
+
+    await userStore.fetchProfile()
+    editMode.value = false
+    editDraft.value = null
+    flash('編集を保存しました ✓')
+  } catch (e: unknown) {
+    console.warn('saveEdit failed', e)
+    flash((e as { message?: string })?.message ?? '保存に失敗しました', 4000)
+  } finally {
+    savingEdit.value = false
+  }
+}
+
+function removeExampleSample(idx: number): void {
+  if (!editDraft.value) return
+  editDraft.value.exampleSamples = editDraft.value.exampleSamples.filter(
+    (_, i) => i !== idx,
+  )
+}
 </script>
 
 <template>
@@ -366,16 +478,24 @@ async function copyDebug(text: string): Promise<void> {
         <h2 class="text-[11px] uppercase tracking-wider text-ink-400">
           🤖 AI が覚えた口調
         </h2>
-        <button
-          v-if="sampleCount >= MIN_SAMPLES"
-          type="button"
-          class="text-[10px] rounded-full border border-accent/40 bg-accent/5 text-accent-soft px-2 py-0.5 hover:bg-accent/10 disabled:opacity-50 active:scale-[.97] transition"
-          :disabled="manualAnalyzing"
-          @click="runAnalyzeInBackground"
-        >{{ manualAnalyzing ? '学習中…' : '今すぐ学習' }}</button>
+        <div class="flex items-center gap-1.5">
+          <button
+            v-if="toneFeatures && !editMode"
+            type="button"
+            class="text-[10px] rounded-full border border-ink-800 text-ink-50 px-2 py-0.5 hover:border-accent/40 active:scale-[.97] transition"
+            @click="startEdit"
+          >編集</button>
+          <button
+            v-if="sampleCount >= MIN_SAMPLES && !editMode"
+            type="button"
+            class="text-[10px] rounded-full border border-accent/40 bg-accent/5 text-accent-soft px-2 py-0.5 hover:bg-accent/10 disabled:opacity-50 active:scale-[.97] transition"
+            :disabled="manualAnalyzing"
+            @click="runAnalyzeInBackground"
+          >{{ manualAnalyzing ? '学習中…' : '今すぐ再学習' }}</button>
+        </div>
       </div>
       <p
-        v-if="lastAnalyzedAt"
+        v-if="lastAnalyzedAt && !editMode"
         class="text-[10px] text-ink-400/80 mb-2"
       >最終更新: {{ fmtDateTime(lastAnalyzedAt) }}</p>
 
@@ -386,7 +506,7 @@ async function copyDebug(text: string): Promise<void> {
         </span>
       </p>
 
-      <dl v-else class="space-y-2 text-xs">
+      <dl v-else-if="!editMode" class="space-y-2 text-xs">
         <!-- 層1: 構造的特徴 -->
         <template v-if="toneFeatures.structuralFeatures">
           <div class="flex gap-3">
@@ -511,6 +631,257 @@ async function copyDebug(text: string): Promise<void> {
           </dd>
         </div>
       </dl>
+
+      <!-- ===== 編集モード ===== -->
+      <div v-else-if="editDraft" class="space-y-4 text-xs">
+        <p class="text-[11px] text-amber-300/90">
+          ✏️ AI の抽出結果を手動で書き換えできます。配列項目は 1 行 1 件で入力。
+        </p>
+
+        <!-- 構造的特徴 -->
+        <div v-if="editDraft.structuralFeatures" class="space-y-2">
+          <h3 class="text-[10px] uppercase tracking-wider text-ink-400">構造的特徴</h3>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block">
+              <span class="text-[10px] text-ink-400">平均文長</span>
+              <input
+                v-model.number="editDraft.structuralFeatures.avgLength"
+                type="number"
+                min="0"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+            </label>
+            <label class="block">
+              <span class="text-[10px] text-ink-400">1メッセ平均文数</span>
+              <input
+                v-model.number="editDraft.structuralFeatures.avgSentencePerMessage"
+                type="number"
+                step="0.1"
+                min="0"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+            </label>
+            <label class="block">
+              <span class="text-[10px] text-ink-400">絵文字密度</span>
+              <select
+                v-model="editDraft.structuralFeatures.emojiDensity"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-[10px] text-ink-400">改行スタイル</span>
+              <select
+                v-model="editDraft.structuralFeatures.lineBreakStyle"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+                <option value="minimal">minimal</option>
+                <option value="moderate">moderate</option>
+                <option value="frequent">frequent</option>
+              </select>
+            </label>
+          </div>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">絵文字密度メモ</span>
+            <input
+              v-model="editDraft.structuralFeatures.emojiDensityNote"
+              type="text"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+            >
+          </label>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">一人称</span>
+            <input
+              v-model="editDraft.structuralFeatures.firstPerson"
+              type="text"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+            >
+          </label>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">頻出語尾 (1行1個)</span>
+            <textarea
+              v-model="draftEndingsText"
+              rows="3"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs resize-y"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">頻出絵文字 (1行1個)</span>
+            <textarea
+              v-model="draftEmojisText"
+              rows="2"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs resize-y"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">特徴的な記号 (1行1個)</span>
+            <textarea
+              v-model="draftPunctuationText"
+              rows="2"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs resize-y"
+            />
+          </label>
+        </div>
+
+        <!-- 判定特徴 -->
+        <div v-if="editDraft.judgedFeatures" class="space-y-2 pt-2 border-t border-ink-800">
+          <h3 class="text-[10px] uppercase tracking-wider text-ink-400">判定特徴</h3>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block">
+              <span class="text-[10px] text-ink-400">方言</span>
+              <select
+                v-model="editDraft.judgedFeatures.dialect"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+                <option value="standard">standard</option>
+                <option value="kansai">kansai</option>
+                <option value="hakata">hakata</option>
+                <option value="okinawa">okinawa</option>
+                <option value="mixed">mixed</option>
+                <option value="unknown">unknown</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-[10px] text-ink-400">方言の強さ</span>
+              <select
+                v-model="editDraft.judgedFeatures.dialectIntensity"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+                <option value="none">none</option>
+                <option value="light">light</option>
+                <option value="moderate">moderate</option>
+                <option value="heavy">heavy</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-[10px] text-ink-400">キャラ</span>
+              <select
+                v-model="editDraft.judgedFeatures.characterStyle"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+                <option value="sweet">sweet (甘え)</option>
+                <option value="cool">cool (クール)</option>
+                <option value="big_sister">big_sister (姉御)</option>
+                <option value="natural">natural (自然)</option>
+                <option value="gal">gal (ギャル)</option>
+                <option value="mature">mature (大人)</option>
+                <option value="other">other</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-[10px] text-ink-400">文体ベース</span>
+              <select
+                v-model="editDraft.judgedFeatures.speechBase"
+                class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+              >
+                <option value="polite">polite (敬語)</option>
+                <option value="casual">casual (タメ口)</option>
+                <option value="mixed">mixed (混在)</option>
+              </select>
+            </label>
+          </div>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">キャラ判定メモ</span>
+            <input
+              v-model="editDraft.judgedFeatures.characterStyleNote"
+              type="text"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+            >
+          </label>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">呼称傾向</span>
+            <input
+              v-model="editDraft.judgedFeatures.callPattern"
+              type="text"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs"
+            >
+          </label>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">方言例 (1行1個)</span>
+            <textarea
+              v-model="draftDialectExamplesText"
+              rows="2"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs resize-y"
+            />
+          </label>
+          <label class="block">
+            <span class="text-[10px] text-ink-400">特徴的な癖 (1行1個・最重要)</span>
+            <textarea
+              v-model="draftCharacteristicPhrasesText"
+              rows="6"
+              class="w-full rounded-md bg-ink-950 border border-ink-800 px-2 py-1 text-xs resize-y"
+            />
+          </label>
+        </div>
+
+        <!-- Few-shot 例 -->
+        <div
+          v-if="editDraft.exampleSamples && editDraft.exampleSamples.length > 0"
+          class="space-y-2 pt-2 border-t border-ink-800"
+        >
+          <h3 class="text-[10px] uppercase tracking-wider text-ink-400">
+            Few-shot 例 ({{ editDraft.exampleSamples.length }} 件)
+          </h3>
+          <div
+            v-for="(ex, i) in editDraft.exampleSamples"
+            :key="i"
+            class="rounded-lg border border-ink-800 bg-ink-950 p-2 space-y-1"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] text-ink-400">例 {{ i + 1 }}</span>
+              <button
+                type="button"
+                class="text-[10px] text-red-300/80 hover:text-red-300"
+                @click="removeExampleSample(i)"
+              >削除</button>
+            </div>
+            <textarea
+              v-model="ex.text"
+              rows="3"
+              class="w-full bg-ink-900 border border-ink-800 rounded-md px-2 py-1 text-[11px] resize-y"
+            />
+            <div class="grid grid-cols-2 gap-1.5">
+              <input
+                v-model="ex.contextLabel"
+                type="text"
+                placeholder="contextLabel (お礼/告知/雑談 等)"
+                class="w-full rounded-md bg-ink-900 border border-ink-800 px-2 py-1 text-[10px]"
+              >
+              <input
+                v-model="ex.channel"
+                type="text"
+                placeholder="channel (line/x_post 等)"
+                class="w-full rounded-md bg-ink-900 border border-ink-800 px-2 py-1 text-[10px]"
+              >
+            </div>
+            <input
+              v-model="ex.characteristicReason"
+              type="text"
+              placeholder="characteristicReason (なぜこれを選んだか)"
+              class="w-full rounded-md bg-ink-900 border border-ink-800 px-2 py-1 text-[10px]"
+            >
+          </div>
+        </div>
+
+        <!-- 保存 / キャンセル -->
+        <div class="flex gap-2 pt-2 border-t border-ink-800">
+          <button
+            type="button"
+            class="flex-1 rounded-xl bg-ink-800 text-ink-50 text-xs py-2 disabled:opacity-50"
+            :disabled="savingEdit"
+            @click="cancelEdit"
+          >キャンセル</button>
+          <button
+            type="button"
+            class="flex-1 rounded-xl bg-accent text-ink-950 text-xs font-semibold py-2 disabled:opacity-50 active:scale-[.99]"
+            :disabled="savingEdit"
+            @click="saveEdit"
+          >{{ savingEdit ? '保存中…' : '保存' }}</button>
+        </div>
+      </div>
     </section>
 
     <!-- 🔧 デバッグ: 実際に保存されている生データ + プロンプト挿入形を表示 -->
@@ -669,5 +1040,36 @@ async function copyDebug(text: string): Promise<void> {
         </div>
       </div>
     </Teleport>
+
+    <!-- ===== 学習中オーバーレイ ===== -->
+    <Teleport to="body">
+      <Transition name="learn-fade">
+        <div
+          v-if="manualAnalyzing"
+          class="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-ink-950/85 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div class="relative w-14 h-14">
+            <div class="absolute inset-0 rounded-full border-2 border-accent/20"></div>
+            <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-accent animate-spin"></div>
+          </div>
+          <p class="mt-5 text-sm font-medium text-ink-50">口調を学習中…</p>
+          <p class="mt-1 text-[11px] text-ink-400">AI があなたの文体を分析しています (10〜30 秒)</p>
+        </div>
+      </Transition>
+    </Teleport>
   </section>
 </template>
+
+<style scoped>
+.learn-fade-enter-active,
+.learn-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.learn-fade-enter-from,
+.learn-fade-leave-to {
+  opacity: 0;
+}
+</style>

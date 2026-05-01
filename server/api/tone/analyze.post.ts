@@ -50,7 +50,7 @@ const TIER_CONFIG: Record<ToneAnalysisTier, TierConfig> = {
   },
 }
 
-const DEFAULT_TIER: ToneAnalysisTier = 'standard'
+const DEFAULT_TIER: ToneAnalysisTier = 'premium'
 
 // =============================================================================
 // Zod スキーマ (PROMPTS.md [10-A] に厳密準拠)
