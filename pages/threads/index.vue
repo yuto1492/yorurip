@@ -3,9 +3,11 @@ import { storeToRefs } from 'pinia'
 import { useThreadsStore } from '~/stores/threads'
 
 useHead({ title: '客と会話 | ヨルリプ' })
-definePageMeta({
-  pageTransition: { name: 'slide-left', mode: 'out-in', appear: false },
-})
+// pageTransition は意図的に外す。スレッド一覧 ↔ チャット詳細の往復で
+// slide-left の 320ms × 2 + API 待ちで「古いページが横にスライドアウトする様子」が
+// 「客選択?」のように見える事故が起きていた。スレッド系はステップフローではないので
+// トランジション無しの即時遷移で OK。NavigationLoader が API 待ちを覆ってくれる。
+definePageMeta({})
 
 const store = useThreadsStore()
 const { list, loading, error } = storeToRefs(store)
@@ -89,18 +91,11 @@ function fmtDateTime(s: string | null): string {
 
     <ul v-else class="space-y-2">
       <li v-for="t in list" :key="t.id">
-        <component
-          :is="deleteMode ? 'button' : 'NuxtLink'"
-          :type="deleteMode ? 'button' : undefined"
-          :to="deleteMode ? undefined : `/threads/${t.id}`"
-          :disabled="deleteMode && deletingId === t.id"
-          class="block w-full text-left rounded-2xl border px-4 py-3 transition active:scale-[.99] disabled:opacity-50"
-          :class="deleteMode
-            ? 'border-red-500/40 bg-red-500/5 hover:bg-red-500/10'
-            : 'border-ink-800 bg-ink-900'"
-          @click="deleteMode
-            ? removeThread(t.id, t.customer_nickname ?? '削除された客')
-            : undefined"
+        <!-- 通常モード: タップでチャット画面へ遷移 -->
+        <NuxtLink
+          v-if="!deleteMode"
+          :to="`/threads/${t.id}`"
+          class="block w-full text-left rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3 transition active:scale-[.99]"
         >
           <div class="flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
@@ -124,14 +119,43 @@ function fmtDateTime(s: string | null): string {
                 {{ fmtDateTime(t.last_message_at ?? t.updated_at) }}
               </p>
             </div>
-            <span
-              v-if="deleteMode"
-              aria-hidden="true"
-              class="text-red-300 text-lg shrink-0"
-            >×</span>
-            <span v-else aria-hidden="true" class="text-ink-400">›</span>
+            <span aria-hidden="true" class="text-ink-400">›</span>
           </div>
-        </component>
+        </NuxtLink>
+
+        <!-- 削除モード: タップで削除 (確認ダイアログ後) -->
+        <button
+          v-else
+          type="button"
+          :disabled="deletingId === t.id"
+          class="block w-full text-left rounded-2xl border border-red-500/40 bg-red-500/5 hover:bg-red-500/10 px-4 py-3 transition active:scale-[.99] disabled:opacity-50"
+          @click="removeThread(t.id, t.customer_nickname ?? '削除された客')"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold truncate">
+                {{ t.customer_nickname ?? '(削除された客)' }}
+                <span v-if="t.title" class="text-ink-400 text-xs">— {{ t.title }}</span>
+              </div>
+              <p
+                v-if="t.last_preview"
+                class="mt-1 text-[11px] text-ink-400 truncate"
+              >
+                <span class="opacity-70">
+                  {{ t.last_direction === 'incoming' ? '客' : '自分' }}:
+                </span>
+                {{ t.last_preview }}
+              </p>
+              <p v-else class="mt-1 text-[11px] text-ink-400/70 italic">
+                (まだメッセージなし)
+              </p>
+              <p class="mt-0.5 text-[10px] text-ink-400/60">
+                {{ fmtDateTime(t.last_message_at ?? t.updated_at) }}
+              </p>
+            </div>
+            <span aria-hidden="true" class="text-red-300 text-lg shrink-0">×</span>
+          </div>
+        </button>
       </li>
     </ul>
   </section>

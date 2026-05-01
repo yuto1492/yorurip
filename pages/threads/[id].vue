@@ -9,9 +9,8 @@ import type {
 } from '~/types/domain'
 
 useHead({ title: '会話 | ヨルリプ' })
-definePageMeta({
-  pageTransition: { name: 'slide-left', mode: 'out-in', appear: false },
-})
+// pageTransition なし。NavigationLoader が API 待ちを覆う。
+definePageMeta({})
 
 const route = useRoute()
 const router = useRouter()

@@ -5,7 +5,7 @@ import { useThreadsStore } from '~/stores/threads'
 
 useHead({ title: '新規スレッド | ヨルリプ' })
 definePageMeta({
-  pageTransition: { name: 'slide-left', mode: 'out-in', appear: false },
+  // pageTransition なし (一覧 ↔ 客選択 の往復もトランジション無しで揃える)
 })
 
 const customersStore = useCustomersStore()

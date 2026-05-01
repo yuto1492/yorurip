@@ -9,7 +9,10 @@
  * Nuxt の `page:start` / `page:finish` フックに紐付けてある。
  */
 
-const SHOW_DELAY_MS = 150
+// 遅延が長いとページ切替時に「古い画面 → 一瞬何もない → 新しい画面」のチラつきが
+// 見えてしまう。短すぎると 100ms 以下の超高速遷移でも一瞬ローダーが顔を出す。
+// 80ms 前後が体感的なバランス。
+const SHOW_DELAY_MS = 80
 
 const isLoading = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
