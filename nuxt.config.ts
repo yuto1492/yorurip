@@ -35,13 +35,32 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'ヨルリプ',
-      meta: [
-        { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
-        { name: 'theme-color', content: '#0f0f10' },
-        { name: 'description', content: '夜職向けAI営業LINE文面ジェネレーター' },
+      meta: [...既存],
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon.ico' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
       ],
     },
+  },
+
+  pwa: {
+    manifest: {
+      name: 'ヨルリプ',
+      short_name: 'ヨルリプ',
+      description: '夜職向けAI営業LINE文面ジェネレーター',
+      theme_color: '#0f0f10',
+      background_color: '#0f0f10',
+      display: 'standalone',
+      lang: 'ja',
+      icons: [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable'
+        },
+      ],
+    },
+    ...
   },
 
   runtimeConfig: {
