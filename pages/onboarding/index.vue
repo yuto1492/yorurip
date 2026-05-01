@@ -53,14 +53,8 @@ async function pick(industry: Industry) {
       <h1 class="mt-1 text-2xl font-bold leading-tight">
         どこで働いてる?
       </h1>
-      <p class="mt-2 text-ink-400 text-sm leading-relaxed">
-        文体・絵文字・敬語の度合いを自動で調整します。<br>
-        後から設定で変更できます。
-      </p>
       <p class="mt-3 text-[11px] text-amber-300/80 leading-relaxed">
-        現在<strong>コンカフェ</strong>を中心に最適化中です。
-        他業種は<span class="rounded px-1 border border-amber-400/40">開発中</span>マーク付きで、
-        生成品質がまだ安定していません。
+        現在<strong>コンカフェ</strong>機能がメインで、他業種は調整中です
       </p>
     </header>
 
@@ -124,9 +118,5 @@ async function pick(industry: Industry) {
       </li>
     </ul>
 
-    <p class="mt-8 text-[11px] leading-relaxed text-ink-400">
-      口調・客情報は使うほど自動で蓄積されます。<br>
-      手動入力は不要です。
-    </p>
   </section>
 </template>

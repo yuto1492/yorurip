@@ -109,7 +109,7 @@ async function submitAll(): Promise<void> {
     <div class="space-y-3">
       <div>
         <p class="text-xs text-ink-400">
-          普段送ってる文を 5 通そのまま貼り付けて。送信履歴からコピペで OK。
+          普段送ってる文を 5 通貼り付けてみよう！AIがあなたの口調を学習するよ！
         </p>
         <p class="mt-2 text-[11px] text-amber-300 font-semibold">
           💡 5件で AI が口調を覚えるよ!
@@ -161,7 +161,7 @@ async function submitAll(): Promise<void> {
       </button>
 
       <p class="mt-2 text-[10px] text-ink-400">
-        💡 自動保存。途中で抜けても続きから OK。
+        💡 自動保存。途中で抜けても続きから書けます。
       </p>
     </div>
   </section>

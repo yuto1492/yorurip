@@ -87,9 +87,5 @@ async function skip(): Promise<void> {
       </button>
     </div>
 
-    <p class="mt-6 text-[11px] leading-relaxed text-ink-400">
-      💡 ホスト系の「姫呼び」用や、コンカフェの「お嬢様呼び」用に文体が調整されます。
-      入れない場合は呼びかけが汎用的になります。
-    </p>
   </section>
 </template>
