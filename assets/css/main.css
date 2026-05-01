@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#__nuxt {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-ink-50 font-sans antialiased;
+}
+
+/* =====================================================
+ * スライド遷移 (オンボーディングのページ間 / サブステップ間)
+ * ===================================================== */
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition:
+    transform 320ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 200ms ease;
+  will-change: transform, opacity;
+}
+
+/* 進む(右→左): 入ってくる側は右からスライドイン、出ていく側は左へ */
+.slide-left-enter-from {
+  transform: translateX(28px);
+  opacity: 0;
+}
+.slide-left-leave-to {
+  transform: translateX(-24px);
+  opacity: 0;
+}
+
+/* 戻る(左→右): 入ってくる側は左から、出ていく側は右へ */
+.slide-right-enter-from {
+  transform: translateX(-28px);
+  opacity: 0;
+}
+.slide-right-leave-to {
+  transform: translateX(24px);
+  opacity: 0;
+}
+
+/* prefers-reduced-motion 対応 */
+@media (prefers-reduced-motion: reduce) {
+  .slide-left-enter-active,
+  .slide-left-leave-active,
+  .slide-right-enter-active,
+  .slide-right-leave-active {
+    transition: opacity 120ms ease;
+  }
+  .slide-left-enter-from,
+  .slide-left-leave-to,
+  .slide-right-enter-from,
+  .slide-right-leave-to {
+    transform: none;
+  }
+}

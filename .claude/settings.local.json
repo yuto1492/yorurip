@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn --version)",
+      "Bash(yarn install *)",
+      "Bash(yarn nuxt *)",
+      "Bash(yarn typecheck *)",
+      "Bash(yarn run *)",
+      "Bash(yarn dev *)",
+      "Bash(tee /tmp/yorurip-dev.log)",
+      "Bash(curl -s -o /tmp/yorurip-home.html -w \"HTTP %{http_code}\\\\n\" http://localhost:3001/)",
+      "Read(//tmp/**)",
+      "Bash(kill %1)",
+      "Skill(claude-api)",
+      "Bash(curl *)",
+      "PowerShell(taskkill *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "Bash(yarn vue-tsc *)",
+      "Bash(node *)",
+      "Bash(yarn add *)"
+    ]
+  }
+}
